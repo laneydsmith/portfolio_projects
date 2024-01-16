@@ -1,0 +1,195 @@
+/*
+COVID-19 Data Exploration
+
+
+Skills used: Joins, CTE's, Temp Tables, Window Functions, Aggregate Functions, Creating Views, Converting Data Types
+
+
+*/
+
+
+SELECT *
+FROM `covid_project.coviddeaths`
+WHERE continent IS NOT NULL
+ORDER BY 3, 4
+;
+
+
+SELECT *
+FROM `covid_project.covidvaccinations`
+WHERE continent IS NOT NULL
+ORDER BY 3, 4
+;
+
+
+
+
+--select data that we are going to be starting with
+
+
+SELECT location, date, total_cases, new_cases, total_deaths, population
+FROM `covid_project.coviddeaths`
+WHERE continent IS NOT NULL
+ORDER BY 1,2
+;
+
+
+
+
+--total cases vs total deaths
+--shows likelihood of death if you contract covid in your country
+
+
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases) * 100 AS deathpercentage
+FROM `covid_project.coviddeaths`
+WHERE continent IS NOT NULL
+ORDER BY 1, 2
+;
+
+
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases) * 100 AS deathpercentage
+FROM `covid_project.coviddeaths`
+WHERE location LIKE '%States%' AND continent IS NOT NULL
+ORDER BY 1, 2
+;
+
+
+
+
+--total cases vs population
+--shows what percentage of the population contracted covid
+
+
+SELECT location, date, total_cases, population, (total_cases/population) * 100 AS percentpopulationinfected
+FROM `covid_project.coviddeaths`
+WHERE location LIKE '%States%' AND continent IS NOT NULL
+ORDER BY 1, 2
+;
+
+
+
+
+--countries with highest infection rate compared to the population
+
+
+SELECT location, population, MAX(total_cases) AS highestinfectioncount, MAX((total_cases/population)) * 100 AS percentpopulationinfected
+FROM `covid_project.coviddeaths`
+WHERE continent IS NOT NULL
+GROUP BY location, population
+ORDER BY percentpopulationinfected DESC
+;
+
+
+
+
+--countries with the highest death count per population
+
+
+SELECT location, MAX(total_deaths) AS totaldeathcount
+FROM `covid_project.coviddeaths`
+WHERE continent IS NOT NULL
+GROUP BY location
+ORDER BY totaldeathcount DESC
+;
+
+
+
+
+--BREAKING THINGS DOWN BY CONTINENT
+
+
+--continents with the highest death count per population
+
+
+SELECT continent, MAX(total_deaths) AS totaldeathcount
+FROM `covid_project.coviddeaths`
+WHERE continent IS NOT NULL
+GROUP BY continent
+ORDER BY totaldeathcount DESC
+;
+
+
+
+
+--GLOBAL NUMBERS
+
+
+SELECT SUM(new_cases) AS total_cases, SUM(new_deaths) AS total_deaths, SUM(new_deaths)/SUM(new_cases) * 100 AS deathpercentage
+FROM `covid_project.coviddeaths`
+WHERE continent IS NOT NULL
+ORDER BY 1, 2
+;
+
+
+
+
+--total population vs vaccinations
+--percentage of population that has recieved at least one covid vaccine##
+
+
+SELECT coviddeaths.continent, coviddeaths.location, coviddeaths.date, coviddeaths.population, covidvaccinations.new_vaccinations, SUM(covidvaccinations.new_vaccinations) OVER (PARTITION BY coviddeaths.location ORDER BY coviddeaths.location, coviddeaths.date) AS rollingpeoplevaccinated
+FROM covid_project.coviddeaths
+JOIN covid_project.covidvaccinations ON coviddeaths.location = covidvaccinations.location AND coviddeaths.date = covidvaccinations.date
+WHERE coviddeaths.continent IS NOT NULL
+ORDER BY 1, 2
+;
+
+
+
+
+--using CTE to performs calculation on partition by in the previous query
+
+
+WITH popvsvac AS
+(
+SELECT coviddeaths.continent, coviddeaths.location, coviddeaths.date, coviddeaths.population, covidvaccinations.new_vaccinations, SUM(covidvaccinations.new_vaccinations) OVER (PARTITION BY coviddeaths.location ORDER BY coviddeaths.location, coviddeaths.date) AS rollingpeoplevaccinated,
+FROM covid_project.coviddeaths
+JOIN covid_project.covidvaccinations ON coviddeaths.location = covidvaccinations.location AND coviddeaths.date = covidvaccinations.date
+WHERE coviddeaths.continent IS NOT NULL
+)
+SELECT *, (rollingpeoplevaccinated/population) * 100
+FROM popvsvac
+;
+
+
+
+
+--using temp table to perform calculation on partition by in the previous query
+
+
+CREATE TEMPORARY TABLE percentpopulationvaccinated
+(
+continent STRING,
+location STRING,
+date DATETIME,
+population INT64,
+new_vaccinations INT64,
+rollingpeoplevaccinated INT64
+)
+;
+
+
+INSERT INTO _script0918fee83909294bc5c4d9cef28e8c3011778af5.percentpopulationvaccinated
+SELECT coviddeaths.continent, coviddeaths.location, coviddeaths.date, coviddeaths.population, covidvaccinations.new_vaccinations, SUM(covidvaccinations.new_vaccinations) OVER (PARTITION BY coviddeaths.location ORDER BY coviddeaths.location, coviddeaths.date) AS rollingpeoplevaccinated,
+FROM covid_project.coviddeaths
+JOIN covid_project.covidvaccinations ON coviddeaths.location = covidvaccinations.location AND coviddeaths.date = covidvaccinations.date
+WHERE coviddeaths.continent IS NOT NULL
+;
+
+
+SELECT *, (rollingpeoplevaccinated/population) * 100
+FROM _script0918fee83909294bc5c4d9cef28e8c3011778af5.percentpopulationvaccinated
+;
+
+
+
+
+--creating view to store data for later visulations
+
+
+CREATE VIEW _script0918fee83909294bc5c4d9cef28e8c3011778af5.percentpopulationvaccinations AS
+SELECT coviddeaths.continent, coviddeaths.location, coviddeaths.date, coviddeaths.population, covidvaccinations.new_vaccinations, SUM(covidvaccinations.new_vaccinations) OVER (PARTITION BY coviddeaths.location ORDER BY coviddeaths.location, coviddeaths.date) AS rollingpeoplevaccinated,
+FROM covid_project.coviddeaths
+JOIN covid_project.covidvaccinations ON coviddeaths.location = covidvaccinations.location AND coviddeaths.date = covidvaccinations.date
+WHERE coviddeaths.continent IS NOT NULL
+;
